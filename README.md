@@ -1,46 +1,113 @@
-<img width="1280" height="630" alt="banner" src="https://github.com/user-attachments/assets/eb2f345f-7b28-41d0-b374-6336dc8f8f75" />
+# Dispose
 
-## 🚀 May The Fourth 2026 - Desafio 6
+Dispose e um app fullstack de coleta urbana com IA, construido em .NET 10 para o desafio May The Fourth 2026.
+Ele mostra os dias de coleta por tipo de residuo para cada bairro, destaca pontos de descarte especial e arma lembretes por proximidade em um frontend Blazor WASM com tema sci-fi inspirado em Star Wars.
 
-Oi, eu sou o [seu nome aqui] e este é o espaço onde compartilho minha jornada de aprendizado durante o desafio **May The Fourth 2026**, realizado pelo [balta.io](https://balta.io). 👻
+## Stack
 
-Aqui você vai encontrar projetos, exercícios e códigos que estou desenvolvendo durante o desafio.
+- .NET 10
+- Blazor WebAssembly
+- ASP.NET Core Minimal API
+- Microsoft Agent Framework + OpenAI
+- EF Core + SQLite
+- Aspire 13.3.1
+- xUnit + bUnit
 
-### Sobre este desafio
-Informa os dias de coleta de cada tipo de lixo na sua rua (API local) e organiza lembretes para descartar itens especiais (pilhas, eletrônicos) quando você passar perto de um ponto de coleta.
+## Estrutura da solucao
 
-#### Nível 1 - Console Application
-- Projeto do tipo Console App simples
-- Separar os agentes em markdowns na pasta agentes
-- Criar os agentes (Arquivos .cs) separados
+| Projeto | Responsabilidade |
+| --- | --- |
+| `Dispose.API` | Endpoints HTTP, composicao de dependencias, CORS, OpenAPI e bootstrap do banco |
+| `Dispose.Application` | Regras de negocio para agenda, pontos de coleta, proximidade e montagem de contexto para IA |
+| `Dispose.Core` | Entidades, enums, DTOs e contratos compartilhados |
+| `Dispose.Infra` | `DbContext`, seeding SQLite e implementacoes de repositorios |
+| `Dispose.AI` | Agente do Microsoft Agent Framework, prompt e invoker OpenAI |
+| `Dispose.Web` | Frontend Blazor WASM com dashboard, consultas, assistente e configuracoes |
+| `Dispose.AppHost` | Orquestracao Aspire da API e do frontend |
+| `Dispose.ServiceDefaults` | Defaults de telemetria, health checks e service discovery do Aspire |
+| `Dispose.UnitTests` | Testes unitarios de regras de negocio e da camada AI |
+| `Dispose.API.Tests` | Testes de integracao dos endpoints principais |
+| `Dispose.Web.Tests` | Testes bUnit para paginas criticas do frontend |
 
-#### Nível 2 - API
-- Estruturar um projeto de IA
-  - Api, Ai, Core, Infra, Applicattion?
-- Expor um endpoint que recebe a entrada do usuário e retorna a receita
+## Funcionalidades implementadas
 
-#### Nível 2 - Fullstack + IA
-- Estruturar um projeto de IA
-  - Api, Ai, Core, Infra, Applicattion?, Frontend (Blazor Wasm)
-- Expor um endpoint que recebe a entrada do usuário e retorna a receita
+- Dashboard inicial com resumo das proximas coletas, status do assistente e pontos especiais
+- Pagina de coletas com filtro por bairro e tipo de residuo
+- Pagina de descarte especial com ecopontos, geolocalizacao opcional e criacao de lembretes
+- Pagina de assistente IA para orientar descarte e navegação dentro do app
+- Pagina de configuracoes para bairro padrao, callsign, raio do lembrete e notificacoes
+- Monitor de proximidade no frontend com alertas em HUD e uso opcional da Notification API
+- API seedada com bairros, agendas e pontos especiais tematicos
+- Camada `Dispose.AI` isolada apenas com o agente, sem serviços de negocio
 
-Neste processo eu aprendi:
-* ✅ 
+## Como executar
 
-## Bagde
-<img src="https://baltaio.blob.core.windows.net/static/images/v4/challenges/may-the-fourth-2026/rewards/dispose/image.png" width="200" />
+### 1. Restaurar dependencias
 
-## Problema
---
+```powershell
+dotnet restore .\Dispose.slnx
+```
 
-## Sobre o ay The Fourth 2026
-O desafio **ay The Fourth 2026** consiste em implementar agentes e inteligência artificial em cenários reais, resolvendo problemas do dia-a-dia com Microsoft Agent Framework, C# e .NET.
+### 2. Configurar a chave OpenAI
 
-### Imersão - Microsoft Agents Framework
-https://www.youtube.com/watch?v=XkgjeBurtFw
+O assistente funciona com `OpenAI:ApiKey` e `OpenAI:Model`.
+O jeito mais seguro e usar user secrets no projeto da API:
 
-### Curso - Microsoft Agents Framework
-https://balta.io/cursos/fundamentos-do-microsoft-agent-framework
+```powershell
+dotnet user-secrets set "OpenAI:ApiKey" "<sua-chave>" --project .\src\Dispose.API
+dotnet user-secrets set "OpenAI:Model" "gpt-4.1-mini" --project .\src\Dispose.API
+```
 
-### Veja meu progresso no desafio
-[Incluir link para o repositório central]
+Sem chave, o app continua operacional para coleta, pontos e lembretes; apenas o endpoint do assistente fica indisponivel.
+
+### 3. Subir a solucao com Aspire
+
+```powershell
+dotnet run --project .\src\Dispose.AppHost
+```
+
+O AppHost orquestra:
+
+- `dispose-api`
+- `dispose-web`
+
+### 4. Rodar API ou frontend isoladamente
+
+```powershell
+dotnet run --project .\src\Dispose.API
+dotnet run --project .\src\Dispose.Web
+```
+
+O frontend usa `https://localhost:7023` como base padrao da API em `src\Dispose.Web\wwwroot\appsettings.json`.
+
+## Banco e dados iniciais
+
+O banco SQLite e criado automaticamente na primeira execucao da API via `EnsureCreated`.
+O seed inclui:
+
+- bairros: `Coruscant Centro`, `Jardim Naboo`, `Setor Tatooine`, `Bosque Endor`
+- agendas para `organico`, `reciclavel`, `vidro` e `poda`
+- pontos especiais para `pilhas`, `eletronicos`, `medicamentos` e `oleo`
+
+## Testes
+
+```powershell
+dotnet test .\Dispose.slnx -v minimal
+```
+
+A cobertura atual prioriza:
+
+- ordenacao e montagem do dashboard
+- validacao e disparo de lembretes por proximidade
+- composicao da resposta do agente
+- endpoints de catalogo, status do assistente e fluxo de lembretes
+- renderizacao do dashboard e comportamento da pagina do assistente no Blazor
+
+## Design
+
+O frontend reaproveita os tokens de `design.md` e os reinterpretou como um painel de comando:
+
+- paineis HUD com cantos chanfrados
+- tipografia Space Grotesk + Manrope
+- fundo espacial com glow neon
+- badges e alerts com leitura rapida para estados de coleta e proximidade
