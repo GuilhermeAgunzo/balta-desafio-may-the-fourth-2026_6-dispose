@@ -1,0 +1,16 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.3.1">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Dispose.API\Dispose.API.csproj" />
+    <ProjectReference Include="..\Dispose.Web\Dispose.Web.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>a3d957fe-a33b-487f-8d67-869f3fd798c5</UserSecretsId>
+  </PropertyGroup>
+
+</Project>

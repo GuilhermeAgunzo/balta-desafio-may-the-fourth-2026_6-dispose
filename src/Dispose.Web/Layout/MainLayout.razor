@@ -1,0 +1,87 @@
+﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject AlertCenter AlertCenter
+@inject IReminderWatcher ReminderWatcher
+@inject IUserPreferencesStore PreferencesStore
+
+<div class="shell">
+    <aside class="sidebar">
+        <NavMenu />
+    </aside>
+
+    <main class="main-surface">
+        <header class="top-bar">
+            <div>
+                <p class="eyebrow">CENTRO DE COMANDO</p>
+                <h1 class="shell-title">Dispose // Missao urbana em modo rebelde</h1>
+            </div>
+
+            <div class="shell-meta">
+                <span class="status-chip status-chip--success">Monitor ativo</span>
+                <span class="shell-callsign">@_pilotCallsign</span>
+            </div>
+        </header>
+
+        @if (AlertCenter.Alerts.Count > 0)
+        {
+            <section class="alert-stack" aria-label="Alertas do app">
+                @foreach (var alert in AlertCenter.Alerts)
+                {
+                    <article class="alert-card @GetAlertClass(alert.Tone)">
+                        <div>
+                            <p class="eyebrow">@alert.Title</p>
+                            <p>@alert.Message</p>
+                        </div>
+
+                        <button class="btn-icon" @onclick="() => AlertCenter.Dismiss(alert.Id)">x</button>
+                    </article>
+                }
+            </section>
+        }
+
+        <article class="content-frame">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code
+{
+    private string _pilotCallsign = "Tripulante Rebelde";
+
+    protected override async Task OnInitializedAsync()
+    {
+        AlertCenter.Changed += HandleAlertsChanged;
+        var preferences = await PreferencesStore.GetAsync();
+        _pilotCallsign = preferences.PilotCallsign;
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            return ReminderWatcher.StartAsync();
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public void Dispose()
+    {
+        AlertCenter.Changed -= HandleAlertsChanged;
+    }
+
+    private void HandleAlertsChanged()
+    {
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private static string GetAlertClass(AlertTone tone) =>
+        tone switch
+        {
+            AlertTone.Success => "alert-card--success",
+            AlertTone.Warning => "alert-card--warning",
+            AlertTone.Error => "alert-card--error",
+            _ => string.Empty
+        };
+}

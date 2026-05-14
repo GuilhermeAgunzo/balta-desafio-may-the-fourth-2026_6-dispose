@@ -1,0 +1,33 @@
+﻿<div class="nav-shell">
+    <div class="nav-header">
+        <div>
+            <p class="eyebrow">DISPOSE</p>
+            <p class="brand-copy">HUD de coleta com IA e lembretes por proximidade.</p>
+        </div>
+
+        <button title="Alternar navegacao" class="navbar-toggler" @onclick="ToggleNavMenu">
+            MENU
+        </button>
+    </div>
+
+    <div class="@NavMenuCssClass nav-scrollable" @onclick="ToggleNavMenu">
+        <nav class="nav-links">
+            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">Painel</NavLink>
+            <NavLink class="nav-link" href="coletas">Coletas</NavLink>
+            <NavLink class="nav-link" href="descarte-especial">Descarte especial</NavLink>
+            <NavLink class="nav-link" href="assistente">Assistente IA</NavLink>
+            <NavLink class="nav-link" href="configuracoes">Configuracoes</NavLink>
+        </nav>
+    </div>
+</div>
+
+@code {
+    private bool collapseNavMenu = true;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+}

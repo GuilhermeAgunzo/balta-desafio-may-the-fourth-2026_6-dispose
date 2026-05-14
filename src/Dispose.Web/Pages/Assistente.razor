@@ -1,0 +1,142 @@
+@page "/assistente"
+@inject IDisposeApiClient ApiClient
+@inject IUserPreferencesStore PreferencesStore
+
+<PageTitle>Assistente IA</PageTitle>
+
+<section class="page-grid">
+    <article class="tech-panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">ORACULO OPERACIONAL</p>
+                <h2>Assistente de descarte com Microsoft Agent Framework</h2>
+            </div>
+            @if (_assistantStatus?.IsConfigured == true)
+            {
+                <span class="status-chip status-chip--success">OpenAI // @_assistantStatus.Model</span>
+            }
+            else
+            {
+                <span class="status-chip status-chip--warning">OpenAI nao configurado</span>
+            }
+        </div>
+
+        <div class="filters-grid">
+            <div>
+                <label class="field-label" for="assistant-neighborhood">Bairro</label>
+                <select id="assistant-neighborhood" class="holo-input" @bind="_selectedNeighborhood">
+                    @foreach (var neighborhood in _neighborhoods)
+                    {
+                        <option value="@neighborhood.Name">@neighborhood.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="field-label" for="assistant-question">Pergunta</label>
+                <textarea id="assistant-question" class="holo-input holo-textarea" rows="4" @bind="_question"></textarea>
+            </div>
+        </div>
+
+        <div class="chip-row">
+            <button class="btn-primary-holo" @onclick="SendAsync" disabled="@(_isSending || _assistantStatus?.IsConfigured != true)">Consultar o oraculo</button>
+            <span class="muted-copy">Pergunte sobre tipo de resíduo, dia de coleta ou ponto especial mais adequado.</span>
+        </div>
+
+        @if (_assistantStatus?.IsConfigured != true)
+        {
+            <p class="muted-copy">Configure <code>OpenAI:ApiKey</code> na API para ativar respostas reais do agente.</p>
+        }
+    </article>
+
+    <section class="content-grid">
+        <article class="tech-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">TRANSMISSAO</p>
+                    <h3>Historico da conversa</h3>
+                </div>
+            </div>
+
+            <div class="chat-log">
+                @foreach (var message in _messages)
+                {
+                    <article class="chat-bubble @(message.IsUser ? "chat-bubble--user" : "chat-bubble--assistant")">
+                        <p class="eyebrow">@message.Author</p>
+                        <p>@message.Content</p>
+                    </article>
+                }
+            </div>
+        </article>
+
+        <article class="tech-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">ATALHOS SUGERIDOS</p>
+                    <h3>Proximos passos sugeridos</h3>
+                </div>
+            </div>
+
+            <div class="chip-row">
+                @foreach (var action in _suggestedActions)
+                {
+                    <span class="mini-chip">@action</span>
+                }
+            </div>
+        </article>
+    </section>
+</section>
+
+@code
+{
+    private readonly List<ChatMessageViewModel> _messages =
+    [
+        new("Dispose", "Pergunte sobre dias de coleta, descarte especial ou qual tela do app usar para cada resíduo.", false)
+    ];
+
+    private IReadOnlyList<NeighborhoodSummaryDto> _neighborhoods = Array.Empty<NeighborhoodSummaryDto>();
+    private IReadOnlyList<string> _suggestedActions = Array.Empty<string>();
+    private AssistantAvailabilityDto? _assistantStatus;
+    private string? _selectedNeighborhood;
+    private string _question = "Onde devo descartar pilhas no meu bairro?";
+    private bool _isSending;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var preferences = await PreferencesStore.GetAsync();
+        _assistantStatus = await ApiClient.GetAssistantStatusAsync();
+        _neighborhoods = await ApiClient.GetNeighborhoodsAsync();
+        _selectedNeighborhood = _neighborhoods.FirstOrDefault(item => item.Name == preferences.PreferredNeighborhood)?.Name
+            ?? _neighborhoods.FirstOrDefault()?.Name;
+    }
+
+    private async Task SendAsync()
+    {
+        if (_isSending || string.IsNullOrWhiteSpace(_question))
+        {
+            return;
+        }
+
+        var question = _question.Trim();
+        _messages.Add(new ChatMessageViewModel("Voce", question, true));
+        _question = string.Empty;
+        _isSending = true;
+
+        try
+        {
+            var response = await ApiClient.AskAssistantAsync(new AssistantRequestDto(question, _selectedNeighborhood));
+            _messages.Add(new ChatMessageViewModel("Dispose", response.Answer, false));
+            _suggestedActions = response.SuggestedActions;
+        }
+        catch (Exception exception)
+        {
+            _messages.Add(new ChatMessageViewModel("Dispose", exception.Message, false));
+        }
+        finally
+        {
+            _isSending = false;
+        }
+    }
+
+    private sealed record ChatMessageViewModel(string Author, string Content, bool IsUser);
+}

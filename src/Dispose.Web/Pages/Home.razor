@@ -1,0 +1,188 @@
+﻿@page "/"
+@inject IDisposeApiClient ApiClient
+@inject IUserPreferencesStore PreferencesStore
+
+<PageTitle>Painel Dispose</PageTitle>
+
+@if (_isLoading)
+{
+    <section class="page-grid">
+        <article class="tech-panel">
+            <p class="eyebrow">SINCRONIZANDO</p>
+            <h2>Coletando sinais da cidade...</h2>
+        </article>
+    </section>
+}
+else if (!string.IsNullOrWhiteSpace(_errorMessage))
+{
+    <section class="page-grid">
+        <article class="tech-panel tech-panel--danger">
+            <p class="eyebrow">FALHA NA MISSÃO</p>
+            <h2>Nao foi possivel carregar o painel.</h2>
+            <p>@_errorMessage</p>
+        </article>
+    </section>
+}
+else if (_dashboard is not null)
+{
+    <section class="page-grid">
+        <article class="hero-panel">
+            <div>
+                <p class="eyebrow">@_dashboard.Sector</p>
+                <h2>Radar de coleta para @_dashboard.NeighborhoodName</h2>
+                <p class="hero-copy">@_dashboard.Motto</p>
+            </div>
+
+            <div class="hero-actions">
+                <label class="field-label" for="home-neighborhood">Bairro em foco</label>
+                <select id="home-neighborhood" class="holo-input" value="@_selectedNeighborhood" @onchange="OnNeighborhoodChanged">
+                    @foreach (var neighborhood in _neighborhoods)
+                    {
+                        <option value="@neighborhood.Name">@neighborhood.Name</option>
+                    }
+                </select>
+
+                <div class="chip-row">
+                    <span class="status-chip">Lembretes ativos: @_dashboard.ActiveReminderCount</span>
+                    <span class="status-chip @(_assistantStatus?.IsConfigured == true ? "status-chip--success" : "status-chip--warning")">
+                        IA @(_assistantStatus?.IsConfigured == true ? "pronta" : "aguardando chave")
+                    </span>
+                </div>
+            </div>
+        </article>
+
+        <section class="stat-grid">
+            <article class="tech-panel">
+                <p class="eyebrow">PROXIMAS ROTAS</p>
+                <h3>@_dashboard.UpcomingCollections.Count</h3>
+                <p>Tipos de resíduo agendados no proximo ciclo.</p>
+            </article>
+            <article class="tech-panel">
+                <p class="eyebrow">PONTOS ESPECIAIS</p>
+                <h3>@_dashboard.FeaturedCollectionPoints.Count</h3>
+                <p>Ecopontos e postos aliados no entorno do bairro.</p>
+            </article>
+            <article class="tech-panel">
+                <p class="eyebrow">GERADO EM</p>
+                <h3>@_dashboard.GeneratedAt.LocalDateTime.ToString("HH:mm")</h3>
+                <p>Atualizacao do painel de comando.</p>
+            </article>
+        </section>
+
+        <section class="content-grid">
+            <article class="tech-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="eyebrow">AGENDA IMEDIATA</p>
+                        <h3>Proximas coletas por tipo</h3>
+                    </div>
+                    <a class="btn-ghost-holo" href="/coletas">Ver calendario completo</a>
+                </div>
+
+                <div class="card-grid">
+                    @foreach (var collection in _dashboard.UpcomingCollections)
+                    {
+                        <article class="data-card">
+                            <div class="data-card__header">
+                                <span class="status-chip">@collection.WasteTypeLabel</span>
+                                <span class="eyebrow">@collection.RouteCode</span>
+                            </div>
+                            <h4>@collection.DayLabel</h4>
+                            <p>@collection.NextCollectionDate.ToString("dd/MM") // @collection.PickupWindow</p>
+                            <p class="muted-copy">@collection.Guidance</p>
+                        </article>
+                    }
+                </div>
+            </article>
+
+            <article class="tech-panel">
+                <div class="panel-header">
+                    <div>
+                        <p class="eyebrow">DESCARTE ESPECIAL</p>
+                        <h3>Pontos recomendados</h3>
+                    </div>
+                    <a class="btn-ghost-holo" href="/descarte-especial">Abrir mapa de pontos</a>
+                </div>
+
+                <div class="card-grid">
+                    @foreach (var point in _dashboard.FeaturedCollectionPoints)
+                    {
+                        <article class="data-card">
+                            <div class="data-card__header">
+                                <span class="status-chip">@point.FactionTag</span>
+                                @if (point.DistanceKm is not null)
+                                {
+                                    <span class="eyebrow">@point.DistanceKm km</span>
+                                }
+                            </div>
+                            <h4>@point.Name</h4>
+                            <p>@point.Address</p>
+                            <p class="muted-copy">@point.Landmark</p>
+                            <div class="chip-row">
+                                @foreach (var category in point.AcceptedCategoryLabels)
+                                {
+                                    <span class="mini-chip">@category</span>
+                                }
+                            </div>
+                        </article>
+                    }
+                </div>
+            </article>
+        </section>
+    </section>
+}
+
+@code
+{
+    private IReadOnlyList<NeighborhoodSummaryDto> _neighborhoods = Array.Empty<NeighborhoodSummaryDto>();
+    private DashboardOverviewDto? _dashboard;
+    private AssistantAvailabilityDto? _assistantStatus;
+    private string? _selectedNeighborhood;
+    private bool _isLoading = true;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            _isLoading = true;
+            _errorMessage = null;
+
+            var preferences = await PreferencesStore.GetAsync();
+            _neighborhoods = await ApiClient.GetNeighborhoodsAsync();
+            _assistantStatus = await ApiClient.GetAssistantStatusAsync();
+            _selectedNeighborhood = _neighborhoods.FirstOrDefault(item => item.Name == preferences.PreferredNeighborhood)?.Name
+                ?? _neighborhoods.FirstOrDefault()?.Name;
+
+            if (!string.IsNullOrWhiteSpace(_selectedNeighborhood))
+            {
+                _dashboard = await ApiClient.GetDashboardAsync(_selectedNeighborhood);
+            }
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = exception.Message;
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+
+    private async Task OnNeighborhoodChanged(ChangeEventArgs arguments)
+    {
+        _selectedNeighborhood = arguments.Value?.ToString();
+
+        if (string.IsNullOrWhiteSpace(_selectedNeighborhood))
+        {
+            return;
+        }
+
+        _dashboard = await ApiClient.GetDashboardAsync(_selectedNeighborhood);
+    }
+}

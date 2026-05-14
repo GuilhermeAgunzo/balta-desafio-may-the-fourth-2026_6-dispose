@@ -1,0 +1,223 @@
+@page "/descarte-especial"
+@inject IDisposeApiClient ApiClient
+@inject IUserPreferencesStore PreferencesStore
+@inject IBrowserBridge BrowserBridge
+@inject AlertCenter AlertCenter
+
+<PageTitle>Descarte especial</PageTitle>
+
+<section class="page-grid">
+    <article class="tech-panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">REDE DE DESCARTE</p>
+                <h2>Pontos especiais e lembretes por proximidade</h2>
+            </div>
+            <button class="btn-ghost-holo" @onclick="UseCurrentLocationAsync">Usar minha localizacao</button>
+        </div>
+
+        <div class="filters-grid">
+            <div>
+                <label class="field-label" for="points-neighborhood">Bairro</label>
+                <select id="points-neighborhood" class="holo-input" value="@_selectedNeighborhood" @onchange="OnNeighborhoodChanged">
+                    @foreach (var neighborhood in _neighborhoods)
+                    {
+                        <option value="@neighborhood.Name">@neighborhood.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="field-label" for="points-category">Categoria especial</label>
+                <select id="points-category" class="holo-input" value="@_selectedCategory" @onchange="OnCategoryChanged">
+                    <option value="">Todas</option>
+                    @foreach (var category in Enum.GetValues<SpecialItemCategory>())
+                    {
+                        <option value="@category">@category.ToDisplayName()</option>
+                    }
+                </select>
+            </div>
+        </div>
+
+        <p class="muted-copy">
+            @if (_currentLocation is null)
+            {
+                <span>Sem geolocalizacao ativa; os pontos estao ordenados pelo bairro selecionado.</span>
+            }
+            else
+            {
+                <span>Localizacao capturada. Distancias aproximadas atualizadas em tempo real.</span>
+            }
+        </p>
+    </article>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <article class="tech-panel tech-panel--danger">
+            <p class="eyebrow">ERRO DE LEITURA</p>
+            <p>@_errorMessage</p>
+        </article>
+    }
+
+    <section class="content-grid">
+        <article class="tech-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">PONTOS CATALOGADOS</p>
+                    <h3>@_points.Count estacao(oes) disponivel(is)</h3>
+                </div>
+            </div>
+
+            <div class="card-grid">
+                @foreach (var point in _points)
+                {
+                    <article class="data-card data-card--wide">
+                        <div class="data-card__header">
+                            <span class="status-chip">@point.FactionTag</span>
+                            @if (point.DistanceKm is not null)
+                            {
+                                <span class="eyebrow">@point.DistanceKm km</span>
+                            }
+                        </div>
+                        <h4>@point.Name</h4>
+                        <p>@point.Address</p>
+                        <p class="muted-copy">@point.Landmark</p>
+
+                        <div class="chip-row">
+                            @foreach (var category in point.AcceptedCategories)
+                            {
+                                <button class="mini-chip mini-chip--action" @onclick="() => CreateReminderAsync(point, category)">
+                                    Lembrete para @category.ToDisplayName()
+                                </button>
+                            }
+                        </div>
+                    </article>
+                }
+            </div>
+        </article>
+
+        <article class="tech-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">LEMBRETES ARMADOS</p>
+                    <h3>@_reminders.Count alerta(s) ativo(s)</h3>
+                </div>
+            </div>
+
+            <div class="list-panel">
+                @foreach (var reminder in _reminders)
+                {
+                    <article class="list-row">
+                        <div>
+                            <strong>@reminder.CategoryLabel</strong>
+                            <p>@reminder.CollectionPointName</p>
+                        </div>
+                        <div class="list-row__meta">
+                            <span>@reminder.RadiusKm km</span>
+                            <span>@reminder.ResidentAlias</span>
+                        </div>
+                    </article>
+                }
+            </div>
+        </article>
+    </section>
+</section>
+
+@code
+{
+    private IReadOnlyList<NeighborhoodSummaryDto> _neighborhoods = Array.Empty<NeighborhoodSummaryDto>();
+    private IReadOnlyList<CollectionPointDto> _points = Array.Empty<CollectionPointDto>();
+    private IReadOnlyList<ReminderDto> _reminders = Array.Empty<ReminderDto>();
+    private UserPreferences _preferences = UserPreferences.Default;
+    private GeoPosition? _currentLocation;
+    private string? _selectedNeighborhood;
+    private string? _selectedCategory;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _preferences = await PreferencesStore.GetAsync();
+        _neighborhoods = await ApiClient.GetNeighborhoodsAsync();
+        _selectedNeighborhood = _neighborhoods.FirstOrDefault(item => item.Name == _preferences.PreferredNeighborhood)?.Name
+            ?? _neighborhoods.FirstOrDefault()?.Name;
+
+        await RefreshDataAsync();
+    }
+
+    private async Task OnNeighborhoodChanged(ChangeEventArgs arguments)
+    {
+        _selectedNeighborhood = arguments.Value?.ToString();
+        await LoadPointsAsync();
+    }
+
+    private async Task OnCategoryChanged(ChangeEventArgs arguments)
+    {
+        _selectedCategory = arguments.Value?.ToString();
+        await LoadPointsAsync();
+    }
+
+    private async Task UseCurrentLocationAsync()
+    {
+        _currentLocation = await BrowserBridge.GetCurrentPositionAsync();
+
+        if (_currentLocation is null)
+        {
+            AlertCenter.Publish("Localizacao indisponivel", "Nao foi possivel capturar sua posicao agora.", AlertTone.Warning);
+            return;
+        }
+
+        AlertCenter.Publish("Localizacao atualizada", "Os pontos foram reordenados pela sua posicao atual.", AlertTone.Success);
+        await LoadPointsAsync();
+    }
+
+    private async Task CreateReminderAsync(CollectionPointDto point, SpecialItemCategory category)
+    {
+        try
+        {
+            var reminder = await ApiClient.CreateReminderAsync(
+                new CreateReminderRequestDto(
+                    _preferences.PilotCallsign,
+                    category,
+                    point.Id,
+                    _preferences.ReminderRadiusKm,
+                    _preferences.BrowserNotificationsEnabled));
+
+            _reminders = await ApiClient.GetRemindersAsync();
+            AlertCenter.Publish(
+                "Lembrete armado",
+                $"Avisaremos quando voce estiver perto de {reminder.CollectionPointName} para {reminder.CategoryLabel.ToLowerInvariant()}.",
+                AlertTone.Success);
+        }
+        catch (Exception exception)
+        {
+            AlertCenter.Publish("Falha ao criar lembrete", exception.Message, AlertTone.Error);
+        }
+    }
+
+    private async Task RefreshDataAsync()
+    {
+        _reminders = await ApiClient.GetRemindersAsync();
+        await LoadPointsAsync();
+    }
+
+    private async Task LoadPointsAsync()
+    {
+        try
+        {
+            _errorMessage = null;
+            SpecialItemCategory? category = Enum.TryParse<SpecialItemCategory>(_selectedCategory, out var parsedCategory)
+                ? parsedCategory
+                : null;
+
+            _points = await ApiClient.GetCollectionPointsAsync(
+                _selectedNeighborhood,
+                category,
+                _currentLocation?.Latitude,
+                _currentLocation?.Longitude);
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+}

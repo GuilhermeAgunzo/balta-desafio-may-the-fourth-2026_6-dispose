@@ -1,0 +1,112 @@
+@page "/coletas"
+@inject IDisposeApiClient ApiClient
+@inject IUserPreferencesStore PreferencesStore
+
+<PageTitle>Coletas</PageTitle>
+
+<section class="page-grid">
+    <article class="tech-panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">CALENDARIO TATICO</p>
+                <h2>Coletas por bairro e tipo</h2>
+            </div>
+            <span class="status-chip">@_schedules.Count rota(s) carregada(s)</span>
+        </div>
+
+        <div class="filters-grid">
+            <div>
+                <label class="field-label" for="schedule-neighborhood">Bairro</label>
+                <select id="schedule-neighborhood" class="holo-input" value="@_selectedNeighborhood" @onchange="OnNeighborhoodChanged">
+                    @foreach (var neighborhood in _neighborhoods)
+                    {
+                        <option value="@neighborhood.Name">@neighborhood.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="field-label" for="schedule-type">Tipo de residuo</label>
+                <select id="schedule-type" class="holo-input" value="@_selectedWasteType" @onchange="OnWasteTypeChanged">
+                    <option value="">Todos</option>
+                    @foreach (var wasteType in Enum.GetValues<WasteType>())
+                    {
+                        <option value="@wasteType">@wasteType.ToDisplayName()</option>
+                    }
+                </select>
+            </div>
+        </div>
+    </article>
+
+    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+    {
+        <article class="tech-panel tech-panel--danger">
+            <p class="eyebrow">FALHA DE CONSULTA</p>
+            <p>@_errorMessage</p>
+        </article>
+    }
+    else
+    {
+        <section class="card-grid">
+            @foreach (var schedule in _schedules)
+            {
+                <article class="data-card data-card--wide">
+                    <div class="data-card__header">
+                        <span class="status-chip">@schedule.WasteTypeLabel</span>
+                        <span class="eyebrow">@schedule.RouteCode</span>
+                    </div>
+                    <h3>@schedule.NeighborhoodName</h3>
+                    <p>@schedule.DayLabel // @schedule.NextCollectionDate.ToString("dd/MM") // @schedule.PickupWindow</p>
+                    <p class="muted-copy">@schedule.Guidance</p>
+                </article>
+            }
+        </section>
+    }
+</section>
+
+@code
+{
+    private IReadOnlyList<NeighborhoodSummaryDto> _neighborhoods = Array.Empty<NeighborhoodSummaryDto>();
+    private IReadOnlyList<CollectionScheduleDto> _schedules = Array.Empty<CollectionScheduleDto>();
+    private string? _selectedNeighborhood;
+    private string? _selectedWasteType;
+    private string? _errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var preferences = await PreferencesStore.GetAsync();
+        _neighborhoods = await ApiClient.GetNeighborhoodsAsync();
+        _selectedNeighborhood = _neighborhoods.FirstOrDefault(item => item.Name == preferences.PreferredNeighborhood)?.Name
+            ?? _neighborhoods.FirstOrDefault()?.Name;
+        await LoadSchedulesAsync();
+    }
+
+    private async Task OnNeighborhoodChanged(ChangeEventArgs arguments)
+    {
+        _selectedNeighborhood = arguments.Value?.ToString();
+        await LoadSchedulesAsync();
+    }
+
+    private async Task OnWasteTypeChanged(ChangeEventArgs arguments)
+    {
+        _selectedWasteType = arguments.Value?.ToString();
+        await LoadSchedulesAsync();
+    }
+
+    private async Task LoadSchedulesAsync()
+    {
+        try
+        {
+            _errorMessage = null;
+            WasteType? wasteType = Enum.TryParse<WasteType>(_selectedWasteType, out var parsedWasteType)
+                ? parsedWasteType
+                : null;
+
+            _schedules = await ApiClient.GetSchedulesAsync(_selectedNeighborhood, wasteType);
+        }
+        catch (Exception exception)
+        {
+            _errorMessage = exception.Message;
+        }
+    }
+}

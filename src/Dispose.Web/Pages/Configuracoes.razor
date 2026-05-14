@@ -1,0 +1,118 @@
+@page "/configuracoes"
+@inject IUserPreferencesStore PreferencesStore
+@inject IDisposeApiClient ApiClient
+@inject IBrowserBridge BrowserBridge
+@inject IReminderWatcher ReminderWatcher
+
+<PageTitle>Configuracoes</PageTitle>
+
+<section class="page-grid">
+    <article class="tech-panel">
+        <div class="panel-header">
+            <div>
+                <p class="eyebrow">AJUSTES DE MISSÃO</p>
+                <h2>Preferencias do navegador e dos lembretes</h2>
+            </div>
+            <button class="btn-primary-holo" @onclick="SaveAsync">Salvar configuracoes</button>
+        </div>
+
+        <div class="filters-grid">
+            <div>
+                <label class="field-label" for="settings-name">Callsign</label>
+                <input id="settings-name" class="holo-input" @bind="_preferences.PilotCallsign" />
+            </div>
+
+            <div>
+                <label class="field-label" for="settings-neighborhood">Bairro padrao</label>
+                <select id="settings-neighborhood" class="holo-input" @bind="_preferences.PreferredNeighborhood">
+                    @foreach (var neighborhood in _neighborhoods)
+                    {
+                        <option value="@neighborhood.Name">@neighborhood.Name</option>
+                    }
+                </select>
+            </div>
+
+            <div>
+                <label class="field-label" for="settings-radius">Raio do lembrete (@_preferences.ReminderRadiusKm km)</label>
+                <input id="settings-radius" type="range" class="range-input" min="0.2" max="3.0" step="0.1" @bind="_preferences.ReminderRadiusKm" />
+            </div>
+
+            <label class="toggle-field">
+                <input type="checkbox" @bind="_preferences.BrowserNotificationsEnabled" />
+                <span>Ativar notificacoes do navegador</span>
+            </label>
+
+            <label class="toggle-field">
+                <input type="checkbox" @bind="_preferences.LocationAlertsEnabled" />
+                <span>Monitorar localizacao para alertas proximos</span>
+            </label>
+        </div>
+    </article>
+
+    <section class="content-grid">
+        <article class="tech-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">PERMISSOES</p>
+                    <h3>Integracoes do navegador</h3>
+                </div>
+            </div>
+
+            <div class="chip-row">
+                <button class="btn-ghost-holo" @onclick="RequestNotificationsAsync">Solicitar notificacoes</button>
+                <button class="btn-ghost-holo" @onclick="RunManualCheckAsync">Executar varredura agora</button>
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(_statusMessage))
+            {
+                <p class="muted-copy">@_statusMessage</p>
+            }
+        </article>
+
+        <article class="tech-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">NOTAS</p>
+                    <h3>Como o MVP trata proximidade</h3>
+                </div>
+            </div>
+
+            <ul class="notes-list">
+                <li>O app consulta sua localizacao e compara com os lembretes cadastrados.</li>
+                <li>Quando voce entra no raio configurado, um alerta em HUD e uma notificacao do navegador podem ser disparados.</li>
+                <li>Sem permissao de localizacao ou notificacao, o app continua funcional, mas o alerta fica limitado a tela.</li>
+            </ul>
+        </article>
+    </section>
+</section>
+
+@code
+{
+    private IReadOnlyList<NeighborhoodSummaryDto> _neighborhoods = Array.Empty<NeighborhoodSummaryDto>();
+    private UserPreferences _preferences = UserPreferences.Default;
+    private string? _statusMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _preferences = await PreferencesStore.GetAsync();
+        _neighborhoods = await ApiClient.GetNeighborhoodsAsync();
+    }
+
+    private async Task SaveAsync()
+    {
+        await PreferencesStore.SaveAsync(_preferences);
+        _statusMessage = "Configuracoes salvas no navegador.";
+    }
+
+    private async Task RequestNotificationsAsync()
+    {
+        var permission = await BrowserBridge.RequestNotificationPermissionAsync();
+        _statusMessage = $"Permissao de notificacao: {permission}.";
+    }
+
+    private async Task RunManualCheckAsync()
+    {
+        await ReminderWatcher.CheckNowAsync();
+        _statusMessage = "Varredura manual executada.";
+    }
+}
