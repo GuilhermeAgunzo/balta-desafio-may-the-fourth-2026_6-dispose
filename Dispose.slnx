@@ -1,2 +1,13 @@
 <Solution>
+  <Project Path="src/Dispose.AI/Dispose.AI.csproj" />
+  <Project Path="tests/Dispose.API.Tests/Dispose.API.Tests.csproj" />
+  <Project Path="src/Dispose.API/Dispose.API.csproj" />
+  <Project Path="src/Dispose.AppHost/Dispose.AppHost.csproj" />
+  <Project Path="src/Dispose.Application/Dispose.Application.csproj" />
+  <Project Path="src/Dispose.Core/Dispose.Core.csproj" />
+  <Project Path="src/Dispose.Infra/Dispose.Infra.csproj" />
+  <Project Path="src/Dispose.ServiceDefaults/Dispose.ServiceDefaults.csproj" />
+  <Project Path="tests/Dispose.UnitTests/Dispose.UnitTests.csproj" />
+  <Project Path="tests/Dispose.Web.Tests/Dispose.Web.Tests.csproj" />
+  <Project Path="src/Dispose.Web/Dispose.Web.csproj" />
 </Solution>
